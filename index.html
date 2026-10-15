@@ -196,4 +196,207 @@ $('#authBtn').onclick = async () => {
     await setDoc(doc(db, 'users', cred.user.uid), {
       username, displayName, lastSeen: 0, typingTo: '', typingAt: 0, createdAt: serverTimestamp()
     });
-    re
+    registering = false;
+    await enter(cred.user.uid);
+  } catch (e) {
+    registering = false;
+    $('#err').textContent = AUTH_ERRORS[e.code] || e.message;
+  }
+};
+
+onAuthStateChanged(auth, async (user) => {
+  if (!user || registering) return show('auth');
+  await enter(user.uid);
+});
+
+async function enter(uid) {
+  const snap = await getDoc(doc(db, 'users', uid));
+  if (!snap.exists()) {
+    $('#err').textContent = 'لا يوجد ملف شخصي لهذا الحساب';
+    return signOut(auth);
+  }
+  me = { uid, ...snap.data() };
+  show('home');
+  startListeners();
+  beat();
+  clearInterval(heartbeat);
+  heartbeat = setInterval(beat, 30000);
+}
+
+function beat() {
+  if (!me) return;
+  updateDoc(doc(db, 'users', me.uid), { lastSeen: serverTimestamp() }).catch(() => {});
+}
+
+window.addEventListener('pagehide', () => {
+  if (me) updateDoc(doc(db, 'users', me.uid), { lastSeen: 0 }).catch(() => {});
+});
+
+// ===== المستمعات العامة =====
+function startListeners() {
+  onSnapshot(collection(db, 'users'), (snap) => {
+    users = new Map();
+    snap.forEach((d) => {
+      if (d.id === me.uid) me.displayName = d.data().displayName;
+      else users.set(d.id, { uid: d.id, ...d.data() });
+    });
+    renderList();
+    updateHead();
+  });
+
+  onSnapshot(query(collection(db, 'messages'), where('to', '==', me.uid), where('readAt', '==', null)), (snap) => {
+    unreadBy = {};
+    snap.forEach((d) => {
+      const f = d.data().from;
+      unreadBy[f] = (unreadBy[f] || 0) + 1;
+    });
+    renderList();
+  });
+}
+
+// ===== قائمة المحادثات =====
+$('#search').oninput = renderList;
+
+function renderList() {
+  if (!me) return;
+  const q = $('#search').value.trim().toLowerCase();
+  const list = [...users.values()]
+    .filter((u) => !q || (u.displayName || '').toLowerCase().includes(q) || (u.username || '').includes(q))
+    .sort((a, b) => (a.displayName || '').localeCompare(b.displayName || '', 'ar'));
+
+  if (!list.length) {
+    $('#list').innerHTML = '<div class="empty">لا يوجد أشخاص بعد.<br>شارك الرابط مع أصدقائك للتسجيل.</div>';
+    return;
+  }
+
+  $('#list').innerHTML = list.map((u) => {
+    const badge = unreadBy[u.uid] ? `<span class="badge">${unreadBy[u.uid]}</span>` : '';
+    return `
+      <div class="row" data-id="${esc(u.uid)}">
+        <div class="avatar">${esc((u.displayName || '؟')[0])}<span class="dot ${isOnline(u) ? 'on' : ''}"></span></div>
+        <div class="meta">
+          <div class="name">${esc(u.displayName)}</div>
+          <div class="sub-line">@${esc(u.username)}</div>
+        </div>
+        ${badge}
+      </div>`;
+  }).join('');
+
+  document.querySelectorAll('#list .row').forEach((row) => {
+    row.onclick = () => openChat(users.get(row.dataset.id));
+  });
+}
+
+// ===== المحادثة =====
+function openChat(u) {
+  if (!u) return;
+  peer = u;
+  $('#cName').textContent = u.displayName;
+  $('#cAvatar').textContent = (u.displayName || '؟')[0];
+  show('chat');
+  subscribeThread();
+  updateHead();
+}
+
+function subscribeThread() {
+  unsubs.forEach((f) => f());
+  unsubs = [];
+  threadMap = new Map();
+
+  const sent = query(collection(db, 'messages'), where('from', '==', me.uid), where('to', '==', peer.uid));
+  const received = query(collection(db, 'messages'), where('from', '==', peer.uid), where('to', '==', me.uid));
+
+  for (const q of [sent, received]) {
+    unsubs.push(onSnapshot(q, (snap) => {
+      snap.docChanges().forEach((ch) => {
+        if (ch.type === 'removed') threadMap.delete(ch.doc.id);
+        else threadMap.set(ch.doc.id, { id: ch.doc.id, ...ch.doc.data() });
+      });
+      renderThread();
+      markIncomingRead();
+    }));
+  }
+}
+
+function markIncomingRead() {
+  threadMap.forEach((m) => {
+    if (m.to === me.uid && !m.readAt) {
+      updateDoc(doc(db, 'messages', m.id), { readAt: serverTimestamp() }).catch(() => {});
+    }
+  });
+}
+
+function renderThread() {
+  const box = $('#msgs');
+  const items = [...threadMap.values()].sort((a, b) => ms(a.createdAt) - ms(b.createdAt));
+  box.innerHTML = items.map((m) => {
+    const mine = m.from === me.uid;
+    const tick = mine ? (m.readAt ? '<span class="tick read">✓✓</span>' : '<span class="tick">✓</span>') : '';
+    return `<div class="bubble ${mine ? 'mine' : 'theirs'}">${esc(m.text)}<div class="time">${timeOf(m.createdAt)} ${tick}</div></div>`;
+  }).join('') || '<div class="empty">ابدأ المحادثة 👋</div>';
+  box.scrollTop = box.scrollHeight;
+}
+
+function updateHead() {
+  if (!peer || !$('#chat').classList.contains('active')) return;
+  const p = users.get(peer.uid) || peer;
+  const typingNow = p.typingTo === me.uid && Date.now() - ms(p.typingAt) < 3000;
+  $('#typing').hidden = !typingNow;
+  $('#cStatus').textContent = isOnline(p) ? 'متصل الآن' : 'غير متصل';
+  if (typingNow) setTimeout(updateHead, 3100);
+}
+
+$('#back').onclick = () => {
+  unsubs.forEach((f) => f());
+  unsubs = [];
+  peer = null;
+  show('home');
+  renderList();
+};
+
+// ===== الإرسال =====
+async function send() {
+  const body = $('#txt').value.trim();
+  if (!body || !peer) return;
+  $('#txt').value = '';
+  try {
+    await addDoc(collection(db, 'messages'), {
+      from: me.uid, to: peer.uid, text: body.slice(0, 2000), readAt: null, createdAt: serverTimestamp()
+    });
+    updateDoc(doc(db, 'users', me.uid), { typingTo: '', typingAt: 0 }).catch(() => {});
+  } catch (e) {
+    alert('تعذّر الإرسال: ' + e.message);
+  }
+}
+
+$('#sendBtn').onclick = send;
+$('#txt').addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+$('#txt').addEventListener('input', () => {
+  if (!peer) return;
+  const now = Date.now();
+  if (now - lastTyping > 1500) {
+    lastTyping = now;
+    updateDoc(doc(db, 'users', me.uid), { typingTo: peer.uid, typingAt: now }).catch(() => {});
+  }
+});
+
+// ===== الإعدادات والخروج =====
+$('#settingsBtn').onclick = async () => {
+  const name = prompt('الاسم الظاهر الجديد:', me.displayName);
+  if (!name || !name.trim()) return;
+  await updateDoc(doc(db, 'users', me.uid), { displayName: name.trim() });
+  me.displayName = name.trim();
+  renderList();
+};
+
+$('#logoutBtn').onclick = async () => {
+  clearInterval(heartbeat);
+  await updateDoc(doc(db, 'users', me.uid), { lastSeen: 0 }).catch(() => {});
+  await signOut(auth);
+  location.reload();
+};
+
+setInterval(() => { renderList(); updateHead(); }, 60000);
+</script>
+</body>
+  </html>
