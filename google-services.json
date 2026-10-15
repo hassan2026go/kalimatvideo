@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1028969719909",
+    "project_id": "hassa-nabdh",
+    "storage_bucket": "hassa-nabdh.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1028969719909:android:c6ef5b21183595f0a6be8c",
+        "android_client_info": {
+          "package_name": "com.nabdh.messenger"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDKqs5tSJqixz7cK8NFmm1rBshEJHwmNWE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
