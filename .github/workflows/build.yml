@@ -18,12 +18,26 @@ jobs:
           java-version: "17"
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-      - name: Verify Firebase config exists
+          - name: Diagnose Firebase config
         run: |
+          echo "Current directory:"
+          pwd
+
+          echo "Root files:"
+          ls -la
+
+          echo "App directory:"
+          ls -la app || true
+
+          echo "Searching for Firebase config:"
+          find . -name "google-services.json" -type f
+
           if [ ! -f app/google-services.json ]; then
-            echo "Missing app/google-services.json. Add it securely before building."
+            echo "ERROR: Firebase config not found at app/google-services.json"
             exit 1
           fi
+
+          echo "SUCCESS: Firebase config exists at app/google-services.json"
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug
       - name: Upload APK
