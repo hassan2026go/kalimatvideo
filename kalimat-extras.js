@@ -254,3 +254,49 @@
     return r;
   };
 })();
+
+/* ---------- تثبيت التطبيق: زر واحد واضح بدون فحص تقني ---------- */
+(function installSimple() {
+  let deferred = null;
+  const standalone = () => window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+
+  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); deferred = e; });
+  window.addEventListener("appinstalled", () => {
+    deferred = null;
+    const b = document.getElementById("installAccountEntry");
+    if (b) b.hidden = true;
+  });
+
+  // يستبدل الدالة الأصلية التي يستدعيها زر التثبيت
+  window.installKalimatApp = async function () {
+    if (standalone()) { toast("التطبيق مثبّت بالفعل"); return; }
+    if (deferred) {
+      deferred.prompt();
+      try { await deferred.userChoice; } catch (e) {}
+      deferred = null;
+      return;
+    }
+    showInstallHelp();
+  };
+
+  function showInstallHelp() {
+    let d = document.getElementById("kInstHelp");
+    if (!d) { d = document.createElement("dialog"); d.id = "kInstHelp"; document.body.append(d); }
+    d.innerHTML =
+      '<h2>تثبيت kalimat</h2>' +
+      '<p class="w">على أندرويد (Chrome): اضغط النقاط الثلاث ⋮ في أعلى الشاشة، ثم اختر «تثبيت التطبيق» أو «إضافة إلى الشاشة الرئيسية».</p>' +
+      '<p class="w">على الآيفون (Safari): اضغط زر المشاركة ⬆️ ثم اختر «إضافة إلى الشاشة الرئيسية».</p>' +
+      '<button class="b g" type="button">إغلاق</button>';
+    d.querySelector("button").onclick = () => d.close();
+    d.showModal();
+  }
+})();
+
+/* ---------- إشعار قصير يؤكد أن الإضافة عملت (يظهر مرة في كل جلسة) ---------- */
+(function loadNotice() {
+  try {
+    if (sessionStorage.getItem("kx-loaded")) return;
+    sessionStorage.setItem("kx-loaded", "1");
+  } catch (e) {}
+  setTimeout(() => { if (typeof toast === "function") toast("✓ تم تحميل تحديثات kalimat"); }, 1500);
+})();
