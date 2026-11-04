@@ -99,7 +99,7 @@
       await C.pc.setLocalDescription(await C.pc.createOffer());
       await waitIce(C.pc);
       sendSig(peer, { c: C.id, t: "offer", s: C.pc.localDescription.sdp });
-    } catch (e) { toast("تعذّر بدء المكالمة"); return endCall(false); }
+    } catch (e) { console.error("call error", e); toast("تعذّر بدء المكالمة: " + ((e && e.message) || e), 6000); return endCall(false); }
     C.timer = setTimeout(() => { if (C && !C.connected) { toast("لم يُجب الطرف الآخر"); endCall(true); } }, 45000);
   }
 
