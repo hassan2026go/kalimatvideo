@@ -1,0 +1,16 @@
+خطوة واحدة فقط في ملف index.html:
+
+امسح: لا شيء
+الصق قبل السطر </body> مباشرة هذا السطر:
+
+<script src="kalimat-extras.js"></script>
+
+ثم احفظ الملف.
+
+وانسخ بجانب index.html هذه الملفات من المجلد:
+kalimat-extras.js
+manifest.webmanifest
+sw.js (استبدل القديم)
+icon-192.png
+icon-512.png
+icon-maskable-512.png
